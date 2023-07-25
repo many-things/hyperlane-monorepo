@@ -1,42 +1,46 @@
 [package]
 name = "hyperlane-core"
-documentation.workspace = true
-edition.workspace = true
-homepage.workspace = true
-license-file.workspace = true
-publish.workspace = true
-version.workspace = true
+documentation = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license-file = { workspace = true }
+publish = { workspace = true }
+version = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait.workspace = true
+async-trait = { workspace = true }
 auto_impl = "1.0"
 bytes = { version = "1", features = ["serde"] }
 convert_case = "0.6"
-derive-new.workspace = true
-ethers-providers.workspace = true
-ethers-core.workspace = true
-ethers-contract.workspace = true
-eyre.workspace = true
-hex = "0.4.3"
-itertools.workspace = true
+derive-new = { workspace = true }
+ethers-providers = { workspace = true }
+ethers-core = { workspace = true }
+ethers-contract = { workspace = true }
+eyre = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
 num = { workspace = true, features = ["serde"] }
-num-derive.workspace = true
-num-traits.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+num-derive = { workspace = true }
+num-traits = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 sha3 = "0.10"
-strum.workspace = true
-thiserror.workspace = true
+strum = { workspace = true }
+thiserror = { workspace = true }
+tonic = { workspace = true }
+cosmrs = { workspace = true }
+tendermint-rpc = { workspace = true }
+
 
 # version determined by ethers-rs
 primitive-types = "*"
 lazy_static = "*"
-derive_more.workspace = true
+derive_more = { workspace = true }
 
 [dev-dependencies]
-config.workspace = true
+config = { workspace = true }
 hyperlane-base = { path = "../hyperlane-base" }
 tokio = { workspace = true, features = ["rt", "time"] }
 walkdir = { version = "2" }

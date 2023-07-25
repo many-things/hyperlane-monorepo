@@ -9,8 +9,10 @@ use crate::accumulator::{
 #[derive(Debug, Clone, Copy, new)]
 /// An incremental merkle tree, modeled on the eth2 deposit contract
 pub struct IncrementalMerkle {
-    branch: [H256; TREE_DEPTH],
-    count: usize,
+    /// The branch of the tree
+    pub branch: [H256; TREE_DEPTH],
+    /// The number of leaves in the tree
+    pub count: usize,
 }
 
 impl Default for IncrementalMerkle {

@@ -3,6 +3,8 @@ use std::error::Error as StdError;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 
+use cosmrs::proto::prost;
+use cosmrs::Error as CosmrsError;
 use ethers_contract::ContractError;
 use ethers_core::types::SignatureError;
 use ethers_providers::{Middleware, ProviderError};
@@ -78,6 +80,39 @@ pub enum ChainCommunicationError {
     /// A transaction submission timed out
     #[error("Transaction submission timed out")]
     TransactionTimeout(),
+    /// Tendermint RPC Error
+    #[error(transparent)]
+    TendermintError(#[from] tendermint_rpc::error::Error),
+    /// BlockNotFoundError
+    #[error("Block not found: {0:?}")]
+    BlockNotFound(H256),
+    /// Cosmrs library error
+    #[error("{0}")]
+    Cosmrs(#[from] CosmrsError),
+    /// Tonic error
+    #[error("{0}")]
+    Tonic(#[from] tonic::transport::Error),
+    /// protobuf error
+    #[error("{0}")]
+    Protobuf(#[from] prost::DecodeError),
+    /// Serde JSON error
+    #[error("{0}")]
+    JsonParseError(#[from] serde_json::Error),
+    /// Hex parse error
+    #[error("{0}")]
+    HexParseError(#[from] hex::FromHexError),
+    /// Invalid Request
+    #[error("Invalid Request: {msg:?}")]
+    InvalidRequest {
+        /// Error message
+        msg: String,
+    },
+    /// Parse Error
+    #[error("ParseError: {msg:?}")]
+    ParseError {
+        /// Error message
+        msg: String,
+    },
 }
 
 impl ChainCommunicationError {
