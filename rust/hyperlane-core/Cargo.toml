@@ -11,13 +11,14 @@ version = { workspace = true }
 
 [dependencies]
 async-trait = { workspace = true }
-auto_impl = "1.0"
-bytes = { version = "1", features = ["serde"] }
-convert_case = "0.6"
+auto_impl = { workspace = true }
+bytes = { workspace = true, features = ["serde"] }
+convert_case = { workspace = true }
 derive-new = { workspace = true }
-ethers-providers = { workspace = true }
-ethers-core = { workspace = true }
-ethers-contract = { workspace = true }
+derive_more = { workspace = true }
+ethers-contract = { workspace = true, optional = true }
+ethers-core = { workspace = true, optional = true }
+ethers-providers = { workspace = true, optional = true }
 eyre = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
@@ -26,50 +27,24 @@ num-derive = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha3 = "0.10"
-strum = { workspace = true }
+sha3 = { workspace = true }
+strum = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tonic = { workspace = true }
 cosmrs = { workspace = true }
 tendermint-rpc = { workspace = true }
-
-
-# version determined by ethers-rs
-primitive-types = "*"
 lazy_static = "*"
-derive_more = { workspace = true }
-async-trait.workspace = true
-auto_impl.workspace = true
-borsh.workspace = true
-bs58.workspace = true
-bytes = { workspace = true, features = ["serde"] }
-config = { workspace = true, optional = true }
-convert_case.workspace = true
-derive-new.workspace = true
-derive_more.workspace = true
-ethers-contract = { workspace = true, optional = true }
-ethers-core = { workspace = true, optional = true }
-ethers-providers = { workspace = true, optional = true }
-eyre.workspace = true
-fixed-hash.workspace = true
-getrandom.workspace = true
-hex.workspace = true
-itertools.workspace = true
-num = { workspace = true, features = ["serde"] }
-num-derive.workspace = true
-num-traits.workspace = true
+borsh = { workspace = true }
+bs58 = { workspace = true }
+fixed-hash = { workspace = true }
+getrandom = { workspace = true }
 primitive-types = { workspace = true, optional = true }
-serde.workspace = true
-serde_json.workspace = true
-sha3.workspace = true
 solana-sdk = { workspace = true, optional = true }
-strum = { workspace = true, optional = true, features = ["derive"] }
-thiserror.workspace = true
 tiny-keccak = { workspace = true, features = ["keccak"]}
-uint.workspace = true
+uint = { workspace = true }
+config = { workspace = true, optional = true }
 
 [dev-dependencies]
-config = { workspace = true }
 hyperlane-base = { path = "../hyperlane-base" }
 tokio = { workspace = true, features = ["rt", "time"] }
 
