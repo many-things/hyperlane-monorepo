@@ -1,6 +1,8 @@
+import { Keypair } from '@solana/web3.js';
 import { Wallet, ethers } from 'ethers';
 
 import { ChainName } from '@hyperlane-xyz/sdk';
+import { ProtocolType, strip0x } from '@hyperlane-xyz/utils';
 
 import { Contexts } from '../../config/contexts';
 import { DeployEnvironment } from '../config';
@@ -87,6 +89,22 @@ export class AgentGCPKey extends CloudAgentKey {
     this.requireFetched();
     // @ts-ignore
     return this.remoteKey.address;
+  }
+
+  addressForProtocol(protocol: ProtocolType): string | undefined {
+    this.requireFetched();
+
+    switch (protocol) {
+      case ProtocolType.Ethereum:
+        return this.address;
+      case ProtocolType.Sealevel:
+        const keypair = Keypair.fromSeed(
+          Uint8Array.from(Buffer.from(strip0x(this.privateKey), 'hex')),
+        );
+        return keypair.publicKey.toBase58();
+      default:
+        return undefined;
+    }
   }
 
   async fetch() {

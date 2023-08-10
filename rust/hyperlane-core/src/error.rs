@@ -67,9 +67,6 @@ pub enum ChainCommunicationError {
     /// An error with a contract call
     #[error(transparent)]
     ContractError(HyperlaneCustomErrorWrapper),
-    /// Provider Error
-    #[error(transparent)]
-    ProviderError(#[from] ProviderError),
     /// A transaction was dropped from the mempool
     #[error("Transaction dropped from mempool {0:?}")]
     TransactionDropped(H256),
@@ -113,6 +110,9 @@ pub enum ChainCommunicationError {
         /// Error message
         msg: String,
     },
+    /// No signer is available and was required for the operation
+    #[error("Signer unavailable")]
+    SignerUnavailable,
 }
 
 impl ChainCommunicationError {
@@ -125,14 +125,53 @@ impl ChainCommunicationError {
     pub fn from_other_boxed<E: HyperlaneCustomError>(err: Box<E>) -> Self {
         Self::Other(HyperlaneCustomErrorWrapper(err))
     }
-}
 
-impl<M> From<ContractError<M>> for ChainCommunicationError
-where
-    M: Middleware + 'static,
-{
-    fn from(e: ContractError<M>) -> Self {
-        Self::ContractError(HyperlaneCustomErrorWrapper(Box::new(e)))
+    /// Creates a chain communication error of the other error variant from a static string
+    pub fn from_other_str(err: &'static str) -> Self {
+        #[derive(Debug)]
+        #[repr(transparent)]
+        struct StringError(&'static str);
+        impl Display for StringError {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.0)
+            }
+        }
+        impl StdError for StringError {}
+
+        Self::from_contract_error(StringError(err))
+    }
+
+    /// Creates a chain communication error of the contract error variant from any other existing
+    /// error
+    pub fn from_contract_error<E>(err: E) -> Self
+    where
+        E: HyperlaneCustomError,
+    {
+        Self::ContractError(HyperlaneCustomErrorWrapper(Box::new(err)))
+    }
+
+    /// Creates a chain communication error of the contract error variant from any other existing
+    /// error
+    pub fn from_contract_error_boxed<E>(err: Box<E>) -> Self
+    where
+        E: HyperlaneCustomError,
+    {
+        Self::ContractError(HyperlaneCustomErrorWrapper(err))
+    }
+
+    /// Creates a chain communication error of the contract error variant from a static string
+    pub fn from_contract_error_str(err: &'static str) -> Self {
+        #[derive(Debug)]
+        #[repr(transparent)]
+        struct StringError(&'static str);
+        impl Display for StringError {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.0)
+            }
+        }
+        impl StdError for StringError {}
+
+        Self::from_contract_error(StringError(err))
     }
 }
 
@@ -142,12 +181,29 @@ impl From<HyperlaneProviderError> for ChainCommunicationError {
     }
 }
 
+#[cfg(feature = "ethers")]
+impl<T: ethers_providers::Middleware + 'static> From<ethers_contract::ContractError<T>>
+    for ChainCommunicationError
+{
+    fn from(err: ethers_contract::ContractError<T>) -> Self {
+        Self::ContractError(HyperlaneCustomErrorWrapper(Box::new(err)))
+    }
+}
+
+#[cfg(feature = "ethers")]
+impl From<ethers_providers::ProviderError> for ChainCommunicationError {
+    fn from(err: ethers_providers::ProviderError) -> Self {
+        Self::ContractError(HyperlaneCustomErrorWrapper(Box::new(err)))
+    }
+}
+
 /// Error types for the Hyperlane protocol
 #[derive(Debug, thiserror::Error)]
 pub enum HyperlaneProtocolError {
     /// Signature Error pasthrough
+    #[cfg(feature = "ethers")]
     #[error(transparent)]
-    SignatureError(#[from] SignatureError),
+    SignatureError(#[from] ethers_core::types::SignatureError),
     /// IO error from Read/Write usage
     #[error(transparent)]
     IoError(#[from] std::io::Error),

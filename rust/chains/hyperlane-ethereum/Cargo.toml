@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "hyperlane-ethereum"
 documentation.workspace = true
@@ -15,9 +17,10 @@ ethers-contract.workspace = true
 ethers-core.workspace = true
 ethers-signers.workspace = true
 ethers.workspace = true
-hex = "0.4.3"
-num = "0.4"
 num-traits.workspace = true
+futures-util.workspace = true
+hex.workspace = true
+num.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
