@@ -8,7 +8,7 @@ use rusoto_kms::KmsClient;
 use serde::Deserialize;
 use tracing::instrument;
 
-use ed25519_dalek::SecretKey;
+use ed25519_dalek::{SecretKey, Signer};
 use hyperlane_sealevel::Keypair;
 
 use super::aws_credentials::AwsChainCredentialsProvider;
@@ -30,6 +30,8 @@ pub enum SignerConf {
         /// The AWS region
         region: Region,
     },
+    /// Cosmos Specific key
+    CosmosKey { key: H256, prefix: String },
     /// Assume node will sign on RPC calls
     #[default]
     Node,
@@ -123,6 +125,7 @@ impl BuildableWithSignerConf for hyperlane_ethereum::Signers {
                 let signer = AwsSigner::new(client, id, 0).await?;
                 hyperlane_ethereum::Signers::Aws(signer)
             }
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer"), // TODO: should be implement
             SignerConf::Node => bail!("Node signer"),
         })
     }
@@ -138,6 +141,7 @@ impl BuildableWithSignerConf for fuels::prelude::WalletUnlocked {
                 fuels::prelude::WalletUnlocked::new_from_private_key(key, None)
             }
             SignerConf::Aws { .. } => bail!("Aws signer is not supported by fuel"),
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer is not supported by fuel"),
             SignerConf::Node => bail!("Node signer is not supported by fuel"),
         })
     }
@@ -154,6 +158,7 @@ impl BuildableWithSignerConf for Keypair {
                     .context("Unable to create Keypair")?
             }
             SignerConf::Aws { .. } => bail!("Aws signer is not supported by fuel"),
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer is not supported by fuel"),
             SignerConf::Node => bail!("Node signer is not supported by fuel"),
         })
     }
