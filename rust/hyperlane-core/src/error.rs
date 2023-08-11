@@ -5,9 +5,9 @@ use std::ops::Deref;
 
 use cosmrs::proto::prost;
 use cosmrs::Error as CosmrsError;
-use ethers_contract::ContractError;
-use ethers_core::types::SignatureError;
-use ethers_providers::{Middleware, ProviderError};
+// use ethers_contract::ContractError;
+// use ethers_core::types::SignatureError;
+// use ethers_providers::{Middleware, ProviderError};
 
 use crate::HyperlaneProviderError;
 use crate::H256;
