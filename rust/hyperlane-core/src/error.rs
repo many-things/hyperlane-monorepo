@@ -113,6 +113,12 @@ pub enum ChainCommunicationError {
     /// No signer is available and was required for the operation
     #[error("Signer unavailable")]
     SignerUnavailable,
+    /// Not match connection type
+    #[error("Not match connection type: require {msg:?}")]
+    NotMatchConnectionType {
+        /// Error message
+        msg: String,
+    },
 }
 
 impl ChainCommunicationError {
