@@ -386,7 +386,12 @@ impl ChainConf {
                 Ok(indexer as Box<dyn MessageIndexer>)
             }
             ChainConnectionConf::Cosmos(conf) => {
-                let indexer = Box::new(h_cosmos::CosmosMailboxIndexer::new(conf, locator)?);
+                let indexer = Box::new(h_cosmos::CosmosMailboxIndexer::new(
+                    conf,
+                    &locator,
+                    "mailbox_dispatch".to_string(), // TODO: is this correct for?
+                )?);
+                Ok(indexer as Box<dyn MessageIndexer>)
             }
         }
         .context(ctx)
@@ -417,6 +422,14 @@ impl ChainConf {
                 let indexer = Box::new(h_sealevel::SealevelMailboxIndexer::new(conf, locator)?);
                 Ok(indexer as Box<dyn SequenceIndexer<H256>>)
             }
+            ChainConnectionConf::Cosmos(conf) => {
+                let indexer = Box::new(h_cosmos::CosmosMailboxIndexer::new(
+                    conf,
+                    &locator,
+                    "mailbox_process".to_string(), // TODO: is this correct for?
+                )?);
+                Ok(indexer as Box<dyn MessageIndexer>)
+            }
         }
         .context(ctx)
     }
@@ -440,12 +453,16 @@ impl ChainConf {
                 )
                 .await
             }
-
             ChainConnectionConf::Fuel(_) => todo!(),
             ChainConnectionConf::Sealevel(conf) => {
                 let paymaster = Box::new(h_sealevel::SealevelInterchainGasPaymaster::new(
                     conf, locator,
                 ));
+                Ok(paymaster as Box<dyn InterchainGasPaymaster>)
+            }
+            ChainConnectionConf::Cosmos(conf) => {
+                let paymaster =
+                    Box::new(h_cosmos::CosmosInterchainGasPaymaster::new(conf, &locator));
                 Ok(paymaster as Box<dyn InterchainGasPaymaster>)
             }
         }
