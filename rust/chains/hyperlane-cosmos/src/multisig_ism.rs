@@ -1,12 +1,12 @@
 use crate::{
     grpc::{WasmGrpcProvider, WasmProvider},
-    verify,
+    signers::Signer,
+    ConnectionConf,
 };
 use async_trait::async_trait;
-use cosmrs::crypto::secp256k1::SigningKey;
 use hyperlane_core::{
-    ChainResult, HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneMessage,
-    HyperlaneProvider, MultisigIsm, RawHyperlaneMessage, H256,
+    ChainResult, ContractLocator, HyperlaneChain, HyperlaneContract, HyperlaneDomain,
+    HyperlaneMessage, HyperlaneProvider, MultisigIsm, RawHyperlaneMessage, H256,
 };
 
 use crate::{
@@ -17,42 +17,23 @@ use crate::{
 /// A reference to a MultisigIsm contract on some Cosmos chain
 #[derive(Debug)]
 pub struct CosmosMultisigIsm {
+    _conf: ConnectionConf,
     domain: HyperlaneDomain,
-    address: String,
+    address: H256,
+    _signer: Signer,
     provider: Box<WasmGrpcProvider>,
 }
 
 impl CosmosMultisigIsm {
     /// create a new instance of CosmosMultisigIsm
-    pub fn new(
-        domain: HyperlaneDomain,
-        address: String,
-        prefix: String,
-        private_key: Vec<u8>,
-        grpc_endpoint: String,
-        chain_id: String,
-    ) -> Self {
-        let signer_address = verify::pub_to_addr(
-            SigningKey::from_slice(&private_key)
-                .unwrap()
-                .public_key()
-                .to_bytes(),
-            &prefix,
-        )
-        .unwrap();
-
-        let provider = WasmGrpcProvider::new(
-            address.clone(),
-            private_key,
-            signer_address,
-            prefix,
-            grpc_endpoint,
-            chain_id,
-        );
+    pub fn new(conf: ConnectionConf, locator: ContractLocator, signer: Signer) -> Self {
+        let provider = WasmGrpcProvider::new(conf.clone(), locator.clone(), signer.clone());
 
         Self {
-            domain,
-            address,
+            _conf: conf,
+            domain: locator.domain.clone(),
+            address: locator.address,
+            _signer: signer,
             provider: Box::new(provider),
         }
     }
@@ -60,7 +41,7 @@ impl CosmosMultisigIsm {
 
 impl HyperlaneContract for CosmosMultisigIsm {
     fn address(&self) -> H256 {
-        bech32_decode(self.address.clone())
+        self.address
     }
 }
 

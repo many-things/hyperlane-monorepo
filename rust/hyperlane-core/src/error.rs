@@ -5,9 +5,9 @@ use std::ops::Deref;
 
 use cosmrs::proto::prost;
 use cosmrs::Error as CosmrsError;
-use ethers_contract::ContractError;
-use ethers_core::types::SignatureError;
-use ethers_providers::{Middleware, ProviderError};
+// use ethers_contract::ContractError;
+// use ethers_core::types::SignatureError;
+// use ethers_providers::{Middleware, ProviderError};
 
 use crate::HyperlaneProviderError;
 use crate::H256;
@@ -113,6 +113,12 @@ pub enum ChainCommunicationError {
     /// No signer is available and was required for the operation
     #[error("Signer unavailable")]
     SignerUnavailable,
+    /// Not match connection type
+    #[error("Not match connection type: require {msg:?}")]
+    NotMatchConnectionType {
+        /// Error message
+        msg: String,
+    },
 }
 
 impl ChainCommunicationError {

@@ -1,67 +1,47 @@
 use std::fmt::{Debug, Formatter};
 use std::num::NonZeroU64;
+use std::ops::RangeInclusive;
 
 use crate::grpc::{WasmGrpcProvider, WasmProvider};
 use crate::payloads::mailbox::{ProcessMessageRequest, ProcessMessageRequestInner};
 use crate::payloads::{general, mailbox};
 use crate::rpc::{CosmosWasmIndexer, WasmIndexer};
-use crate::verify;
+use crate::{signers::Signer, verify, ConnectionConf};
 use async_trait::async_trait;
-use cosmrs::crypto::secp256k1::SigningKey;
 
 use cosmrs::proto::cosmos::base::abci::v1beta1::TxResponse;
 use cosmrs::proto::cosmos::tx::v1beta1::SimulateResponse;
 
 use cosmrs::tendermint::abci::EventAttribute;
-use hyperlane_core::RawHyperlaneMessage;
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, utils::fmt_bytes, ChainResult, Checkpoint,
     HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneMessage, HyperlaneProvider,
     Indexer, LogMeta, Mailbox, TxCostEstimate, TxOutcome, H256, U256,
 };
-use tracing::instrument;
+use hyperlane_core::{ContractLocator, MessageIndexer, RawHyperlaneMessage, SequenceIndexer, H512};
+use tracing::{info, instrument};
 
 /// A reference to a Mailbox contract on some Cosmos chain
 pub struct CosmosMailbox {
+    _conf: ConnectionConf,
     domain: HyperlaneDomain,
-    address: String,
-    prefix: String,
+    address: H256,
+    signer: Signer,
     provider: Box<WasmGrpcProvider>,
 }
 
 impl CosmosMailbox {
     /// Create a reference to a mailbox at a specific Ethereum address on some
     /// chain
-    pub fn new(
-        domain: HyperlaneDomain,
-        address: String,
-        prefix: String,
-        private_key: Vec<u8>,
-        grpc_endpoint: String,
-        chain_id: String,
-    ) -> Self {
-        let signer_address = verify::pub_to_addr(
-            SigningKey::from_slice(&private_key)
-                .unwrap()
-                .public_key()
-                .to_bytes(),
-            &prefix,
-        )
-        .unwrap();
-
-        let provider = WasmGrpcProvider::new(
-            address.clone(),
-            private_key,
-            signer_address,
-            prefix.clone(),
-            grpc_endpoint,
-            chain_id,
-        );
+    pub fn new(conf: ConnectionConf, locator: ContractLocator, signer: Signer) -> Self {
+        let provider: WasmGrpcProvider =
+            WasmGrpcProvider::new(conf.clone(), locator.clone(), signer.clone());
 
         Self {
-            domain,
-            address,
-            prefix,
+            _conf: conf,
+            domain: locator.domain.clone(),
+            address: locator.address,
+            signer,
             provider: Box::new(provider),
         }
     }
@@ -69,7 +49,7 @@ impl CosmosMailbox {
 
 impl HyperlaneContract for CosmosMailbox {
     fn address(&self) -> H256 {
-        verify::bech32_decode(self.address.clone())
+        self.address
     }
 }
 
@@ -84,8 +64,9 @@ impl HyperlaneChain for CosmosMailbox {
 }
 
 impl Debug for CosmosMailbox {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self as &dyn HyperlaneContract)
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        // Debug::fmt(&(self as &dyn HyperlaneContract), f)
+        todo!()
     }
 }
 
@@ -158,7 +139,7 @@ impl Mailbox for CosmosMailbox {
 
     #[instrument(err, ret, skip(self))]
     async fn recipient_ism(&self, recipient: H256) -> ChainResult<H256> {
-        let address = verify::digest_to_addr(recipient, &self.prefix)?;
+        let address = verify::digest_to_addr(recipient, &self.signer.prefix)?;
 
         let payload = mailbox::DefaultIsmRequest {
             default_ism: general::EmptyStruct {},
@@ -191,7 +172,7 @@ impl Mailbox for CosmosMailbox {
             .wasm_send(process_message, tx_gas_limit)
             .await?;
         Ok(TxOutcome {
-            txid: H256::from_slice(hex::decode(response.txhash).unwrap().as_slice()),
+            transaction_id: H512::from_slice(hex::decode(response.txhash).unwrap().as_slice()),
             executed: response.code == 0,
             gas_used: U256::from(response.gas_used),
             gas_price: U256::from(response.gas_wanted),
@@ -230,20 +211,25 @@ impl Mailbox for CosmosMailbox {
 #[derive(Debug)]
 pub struct CosmosMailboxIndexer {
     indexer: Box<CosmosWasmIndexer>,
+    provider: Box<WasmGrpcProvider>,
 }
 
 impl CosmosMailboxIndexer {
     /// Create a reference to a mailbox at a specific Ethereum address on some
     /// chain
-    pub fn new(address: String, rpc_endpoint: String) -> Self {
-        let indexer = CosmosWasmIndexer::new(
-            address,
-            "mailbox_dispatch".to_string(),
-            rpc_endpoint.parse().unwrap(),
-        );
+    pub fn new(
+        conf: ConnectionConf,
+        locator: ContractLocator,
+        signer: Signer,
+        event_type: String,
+    ) -> Self {
+        let indexer: CosmosWasmIndexer =
+            CosmosWasmIndexer::new(conf.clone(), locator.clone(), event_type.clone());
+        let provider: WasmGrpcProvider = WasmGrpcProvider::new(conf, locator, signer);
 
         Self {
             indexer: Box::new(indexer),
+            provider: Box::new(provider),
         }
     }
 
@@ -274,19 +260,40 @@ impl CosmosMailboxIndexer {
             res
         }
     }
+
+    #[instrument(level = "debug", err, ret, skip(self))]
+    async fn count(&self, lag: Option<NonZeroU64>) -> ChainResult<u32> {
+        let payload = mailbox::CountRequest {
+            count: general::EmptyStruct {},
+        };
+
+        let data = self.provider.wasm_query(payload, lag).await?;
+        let response: mailbox::CountResponse = serde_json::from_slice(&data)?;
+
+        Ok(response.count)
+    }
+}
+
+#[async_trait]
+impl MessageIndexer for CosmosMailboxIndexer {
+    #[instrument(err, skip(self))]
+    async fn fetch_count_at_tip(&self) -> ChainResult<(u32, u32)> {
+        let tip = Indexer::<HyperlaneMessage>::get_finalized_block_number(self as _).await?;
+        let count = self.count(None).await?;
+        Ok((count, tip))
+    }
 }
 
 #[async_trait]
 impl Indexer<HyperlaneMessage> for CosmosMailboxIndexer {
     async fn fetch_logs(
         &self,
-        from: u32,
-        to: u32,
+        range: RangeInclusive<u32>,
     ) -> ChainResult<Vec<(HyperlaneMessage, LogMeta)>> {
         let mut result: Vec<(HyperlaneMessage, LogMeta)> = vec![];
         let parser = self.get_parser();
 
-        for block_number in from..to {
+        for block_number in range {
             let logs = self.indexer.get_event_log(block_number, parser).await?;
             result.extend(logs);
         }
@@ -301,11 +308,11 @@ impl Indexer<HyperlaneMessage> for CosmosMailboxIndexer {
 
 #[async_trait]
 impl Indexer<H256> for CosmosMailboxIndexer {
-    async fn fetch_logs(&self, from: u32, to: u32) -> ChainResult<Vec<(H256, LogMeta)>> {
+    async fn fetch_logs(&self, range: RangeInclusive<u32>) -> ChainResult<Vec<(H256, LogMeta)>> {
         let mut result: Vec<(HyperlaneMessage, LogMeta)> = vec![];
         let parser: fn(Vec<EventAttribute>) -> HyperlaneMessage = self.get_parser();
 
-        for block_number in from..to {
+        for block_number in range {
             let logs = self.indexer.get_event_log(block_number, parser).await?;
             result.extend(logs);
         }
@@ -318,5 +325,14 @@ impl Indexer<H256> for CosmosMailboxIndexer {
 
     async fn get_finalized_block_number(&self) -> ChainResult<u32> {
         self.indexer.latest_block_height().await
+    }
+}
+
+#[async_trait]
+impl SequenceIndexer<H256> for CosmosMailboxIndexer {
+    async fn sequence_at_tip(&self) -> ChainResult<(u32, u32)> {
+        // TODO: implement when sealevel scraper support is implemented
+        info!("Message delivery indexing not implemented");
+        Ok((1, 1))
     }
 }

@@ -30,6 +30,13 @@ pub enum SignerConf {
         /// The AWS region
         region: Region,
     },
+    /// Cosmos Specific key
+    CosmosKey {
+        /// Private key value
+        key: H256,
+        /// Prefix for cosmos address
+        prefix: String,
+    },
     /// Assume node will sign on RPC calls
     #[default]
     Node,
@@ -123,6 +130,7 @@ impl BuildableWithSignerConf for hyperlane_ethereum::Signers {
                 let signer = AwsSigner::new(client, id, 0).await?;
                 hyperlane_ethereum::Signers::Aws(signer)
             }
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer"), // TODO: should be implement
             SignerConf::Node => bail!("Node signer"),
         })
     }
@@ -138,6 +146,7 @@ impl BuildableWithSignerConf for fuels::prelude::WalletUnlocked {
                 fuels::prelude::WalletUnlocked::new_from_private_key(key, None)
             }
             SignerConf::Aws { .. } => bail!("Aws signer is not supported by fuel"),
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer is not supported by fuel"),
             SignerConf::Node => bail!("Node signer is not supported by fuel"),
         })
     }
@@ -154,7 +163,22 @@ impl BuildableWithSignerConf for Keypair {
                     .context("Unable to create Keypair")?
             }
             SignerConf::Aws { .. } => bail!("Aws signer is not supported by fuel"),
+            SignerConf::CosmosKey { .. } => bail!("Cosmos signer is not supported by fuel"),
             SignerConf::Node => bail!("Node signer is not supported by fuel"),
+        })
+    }
+}
+
+#[async_trait]
+impl BuildableWithSignerConf for hyperlane_cosmos::Signer {
+    async fn build(conf: &SignerConf) -> Result<Self, Report> {
+        Ok(match conf {
+            SignerConf::HexKey { .. } => bail!("HexKey signer is not supported by cosmos"),
+            SignerConf::Aws { .. } => bail!("Aws signer is not supported by cosmos"),
+            SignerConf::CosmosKey { key, prefix } => {
+                hyperlane_cosmos::Signer::new(key.as_bytes().to_vec(), prefix.clone())
+            }
+            SignerConf::Node => bail!("Node signer is not supported by cosmos"),
         })
     }
 }
