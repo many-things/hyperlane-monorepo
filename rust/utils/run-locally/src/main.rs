@@ -34,6 +34,7 @@ use crate::solana::*;
 use crate::utils::{concat_path, make_static, stop_child, AgentHandles, ArbitraryData, TaskHandle};
 
 mod config;
+mod cosmos;
 mod ethereum;
 mod invariants;
 mod logging;
