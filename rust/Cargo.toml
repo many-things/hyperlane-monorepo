@@ -172,6 +172,7 @@ ripemd = "0.1.3"
 hyper = "0.14"
 hyper-tls = "0.5.0"
 hex = "0.4.3"
+hpl-interface = "0.0.1"
 tendermint-rpc = { version = "0.32.0", features = ["http-client", "tokio"] }
 walkdir = "2"
 warp = "0.3"

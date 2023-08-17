@@ -21,3 +21,4 @@ tempfile.workspace = true
 ureq = { workspace = true, default-features = false }
 which.workspace = true
 macro_rules_attribute.workspace = true
+hpl-interface.workspace = true
