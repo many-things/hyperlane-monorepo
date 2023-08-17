@@ -82,6 +82,18 @@ impl FromRawConf<'_, RawSignerConf> for SignerConf {
                     .parse()
                     .into_config_result(region_path)?,
             }),
+            Some("cosmosKey") => Ok(Self::CosmosKey {
+                key: raw
+                    .key
+                    .ok_or_else(|| eyre!("Missing `key` for CosmosKey signer"))
+                    .into_config_result(key_path)?
+                    .parse()
+                    .into_config_result(key_path)?,
+                prefix: raw
+                    .prefix
+                    .ok_or_else(|| eyre!("Missing `prefix` for CosmosKey signer"))
+                    .into_config_result(key_path)?,
+            }),
             Some(t) => Err(eyre!("Unknown signer type `{t}`")).into_config_result(|| cwp + "type"),
             None if raw.key.is_some() => Ok(Self::HexKey {
                 key: raw.key.unwrap().parse().into_config_result(key_path)?,
