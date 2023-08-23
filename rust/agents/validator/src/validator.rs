@@ -4,13 +4,14 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use eyre::Result;
+use hyperlane_cosmos::verify::priv_to_binary_addr;
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::{error, info, info_span, instrument::Instrumented, warn, Instrument};
 
 use hyperlane_base::{
     db::{HyperlaneRocksDB, DB},
     run_all, BaseAgent, CheckpointSyncer, ContractSyncMetrics, CoreMetrics, HyperlaneAgentCore,
-    MessageContractSync,
+    MessageContractSync, SignerConf,
 };
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, Announcement, ChainResult, HyperlaneChain,
@@ -38,6 +39,7 @@ pub struct Validator {
     reorg_period: u64,
     interval: Duration,
     checkpoint_syncer: Arc<dyn CheckpointSyncer>,
+    raw_signer: SignerConf,
 }
 
 impl AsRef<HyperlaneAgentCore> for Validator {
@@ -97,6 +99,7 @@ impl BaseAgent for Validator {
             reorg_period: settings.reorg_period,
             interval: settings.interval,
             checkpoint_syncer,
+            raw_signer: settings.validator.clone(),
         })
     }
 
@@ -234,9 +237,14 @@ impl Validator {
             return Ok(());
         }
 
+        let address = match self.raw_signer {
+            SignerConf::CosmosKey { key, .. } => priv_to_binary_addr(key.0.as_slice().to_vec())?,
+            _ => self.signer.eth_address(),
+        };
+
         // Sign and post the validator announcement
         let announcement = Announcement {
-            validator: self.signer.eth_address(),
+            validator: address,
             mailbox_address: self.mailbox.address(),
             mailbox_domain: self.mailbox.domain().id(),
             storage_location: self.checkpoint_syncer.announcement_location(),
