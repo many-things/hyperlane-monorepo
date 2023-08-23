@@ -4100,6 +4100,7 @@ name = "hyperlane-cosmos"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.21.2",
  "bech32 0.9.1",
  "cosmrs",
  "hex 0.4.3",

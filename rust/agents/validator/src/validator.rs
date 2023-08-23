@@ -14,8 +14,8 @@ use hyperlane_base::{
 };
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, Announcement, ChainResult, HyperlaneChain,
-    HyperlaneContract, HyperlaneDomain, HyperlaneSigner, HyperlaneSignerExt, Mailbox, TxOutcome,
-    ValidatorAnnounce, H256, U256,
+    HyperlaneContract, HyperlaneDomain, HyperlaneSigner, HyperlaneSignerExt, Mailbox, Signable,
+    TxOutcome, ValidatorAnnounce, H256, U256,
 };
 use hyperlane_ethereum::{SingletonSigner, SingletonSignerHandle};
 
