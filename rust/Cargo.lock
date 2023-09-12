@@ -4104,6 +4104,7 @@ dependencies = [
  "bech32 0.9.1",
  "cosmrs",
  "hex 0.4.3",
+ "hpl-interface",
  "hyper",
  "hyper-tls",
  "hyperlane-core",
