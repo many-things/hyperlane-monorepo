@@ -10,10 +10,7 @@ use tracing::instrument;
 use tracing::{debug, info};
 
 use hyperlane_base::{db::HyperlaneRocksDB, CheckpointSyncer, CoreMetrics};
-use hyperlane_core::{
-    accumulator::incremental::IncrementalMerkle, Checkpoint, CheckpointWithMessageId,
-    HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneSignerExt, Mailbox,
-};
+use hyperlane_core::{accumulator::incremental::IncrementalMerkle, Checkpoint, CheckpointWithMessageId, HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneSignerExt, Mailbox, Signable};
 use hyperlane_ethereum::SingletonSignerHandle;
 
 #[derive(Clone)]
@@ -112,6 +109,7 @@ impl ValidatorSubmitter {
                             );
                             continue;
                         }
+
 
                         let signed_checkpoint = self.signer.sign(queued_checkpoint).await?;
                         self.checkpoint_syncer
