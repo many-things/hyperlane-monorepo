@@ -14,6 +14,7 @@ mod crypto;
 mod deploy;
 mod link;
 mod rpc;
+mod source;
 mod types;
 mod utils;
 
@@ -22,13 +23,13 @@ use types::*;
 use utils::*;
 
 use crate::cosmos::link::link_networks;
-use crate::logging::log;
 use crate::program::Program;
 use crate::utils::{as_task, concat_path, stop_child, AgentHandles, TaskHandle};
 use crate::AGENT_BIN_PATH;
 use cli::{OsmosisCLI, OsmosisEndpoint};
 
 use self::deploy::deploy_cw_hyperlane;
+use self::source::{CLISource, CodeSource};
 
 // const OSMOSIS_CLI_GIT: &str = "https://github.com/osmosis-labs/osmosis";
 // const OSMOSIS_CLI_VERSION: &str = "19.0.0";
@@ -76,97 +77,15 @@ fn make_target() -> String {
     format!("{}-{}", os, arch)
 }
 
-pub enum CLISource {
-    Local { path: String },
-    Remote { url: String, version: String },
-}
-
-impl Default for CLISource {
-    fn default() -> Self {
-        Self::Remote {
-            url: OSMOSIS_CLI_GIT.to_string(),
-            version: OSMOSIS_CLI_VERSION.to_string(),
-        }
-    }
-}
-
-impl CLISource {
-    fn install_remote(dir: Option<PathBuf>, git: String, version: String) -> PathBuf {
-        let target = make_target();
-
-        let dir_path = match dir {
-            Some(path) => path,
-            None => tempdir().unwrap().into_path(),
-        };
-        let dir_path = dir_path.to_str().unwrap();
-
-        let release_name = format!("osmosisd-{version}-{target}");
-        let release_comp = format!("{release_name}.tar.gz");
-
-        log!("Downloading Osmosis CLI v{}", version);
-        let uri = format!("{git}/releases/download/v{version}/{release_comp}");
-        download(&release_comp, &uri, dir_path);
-
-        log!("Uncompressing Osmosis release");
-        unzip(&release_comp, dir_path);
-
-        concat_path(dir_path, "osmosisd")
-    }
-
-    pub fn install(self, dir: Option<PathBuf>) -> PathBuf {
-        match self {
-            CLISource::Local { path } => path.into(),
-            CLISource::Remote { url, version } => Self::install_remote(dir, url, version),
-        }
-    }
-}
-
-pub fn install_codes(dir: Option<PathBuf>, local: bool) -> BTreeMap<String, PathBuf> {
-    let dir_path = match dir {
-        Some(path) => path,
-        None => tempdir().unwrap().into_path(),
-    };
-
-    if !local {
-        let dir_path = dir_path.to_str().unwrap();
-
-        let release_name = format!("cw-hyperlane-v{CW_HYPERLANE_VERSION}");
-        let release_comp = format!("{release_name}.tar.gz");
-
-        log!("Downloading cw-hyperlane v{}", CW_HYPERLANE_VERSION);
-        let uri =
-            format!("{CW_HYPERLANE_GIT}/releases/download/v{CW_HYPERLANE_VERSION}/{release_comp}");
-        download(&release_comp, &uri, dir_path);
-
-        log!("Uncompressing cw-hyperlane release");
-        unzip(&release_comp, dir_path);
-    }
-
-    // make contract_name => path map
-    fs::read_dir(dir_path)
-        .unwrap()
-        .map(|v| {
-            let entry = v.unwrap();
-            (entry.file_name().into_string().unwrap(), entry.path())
-        })
-        .filter(|(filename, _)| filename.ends_with(".wasm"))
-        .map(|v| (v.0.replace(".wasm", ""), v.1))
-        .collect()
-}
-
 #[allow(dead_code)]
 pub fn install_cosmos(
     cli_dir: Option<PathBuf>,
     cli_src: Option<CLISource>,
     codes_dir: Option<PathBuf>,
+    codes_src: Option<CodeSource>,
 ) -> (PathBuf, BTreeMap<String, PathBuf>) {
-    let osmosisd = cli_src
-        .unwrap_or(CLISource::Remote {
-            url: OSMOSIS_CLI_GIT.to_string(),
-            version: OSMOSIS_CLI_VERSION.to_string(),
-        })
-        .install(cli_dir);
-    let codes = install_codes(codes_dir, true);
+    let osmosisd = cli_src.unwrap_or_default().install(cli_dir);
+    let codes = codes_src.unwrap_or_default().install(codes_dir);
 
     (osmosisd, codes)
 }
@@ -262,7 +181,6 @@ fn launch_cosmos_node(config: CosmosConfig) -> CosmosResp {
 fn launch_cosmos_validator(
     agent_config: AgentConfig,
     agent_config_path: PathBuf,
-    remotes: Vec<String>,
     debug: bool,
 ) -> AgentHandles {
     let validator_bin = concat_path(format!("../../{AGENT_BIN_PATH}"), "validator");
@@ -284,7 +202,6 @@ fn launch_cosmos_validator(
         .hyp_env("CHECKPOINTSYNCER_PATH", checkpoint_path.to_str().unwrap())
         .hyp_env("CHECKPOINTSYNCER_TYPE", "localStorage")
         .hyp_env("ORIGINCHAINNAME", agent_config.name)
-        .hyp_env("RELAYCHAINS", remotes.join(","))
         .hyp_env("REORGPERIOD", "1")
         .hyp_env("DB", validator_base_db.to_str().unwrap())
         .hyp_env("METRICS", agent_config.domain.to_string())
@@ -323,13 +240,17 @@ fn launch_cosmos_relayer(
 #[allow(dead_code)]
 fn run_locally() {
     let debug = false;
-    let cli_src = Some(CLISource::Local {
-        path: "/Users/eric/many-things/osmosis/osmosis/build/osmosisd".to_string(),
-    });
-    let wasm_path: PathBuf = "/Users/eric/many-things/mitosis/cw-hyperlane/artifacts".into();
+    let cli_src = Some(CLISource::local(
+        "/Users/frostornge/dev/osmosis/eric/build/osmosisd",
+    ));
     // let cli_src = None;
 
-    let (osmosisd, codes) = install_cosmos(None, cli_src, Some(wasm_path));
+    let code_src = Some(CodeSource::local(
+        "/Users/frostornge/dev/hyperlane/cw-hyperlane/artifacts",
+    ));
+    // let code_src = None;
+
+    let (osmosisd, codes) = install_cosmos(None, cli_src, None, code_src);
 
     let addr_base = "tcp://0.0.0.0";
     let default_config = CosmosConfig {
@@ -444,14 +365,8 @@ fn run_locally() {
     let hpl_val = agent_config_out
         .chains
         .clone()
-        .into_iter()
-        .map(|(chain_id, agent_config)| {
-            let mut others = agent_config_out.chains.clone();
-            others.remove(&chain_id);
-            let remotes = others.into_iter().map(|v| v.0).collect::<Vec<_>>();
-
-            launch_cosmos_validator(agent_config, agent_config_path.clone(), remotes, debug)
-        })
+        .into_values()
+        .map(|agent_config| launch_cosmos_validator(agent_config, agent_config_path.clone(), debug))
         .collect::<Vec<_>>();
     let hpl_rly = launch_cosmos_relayer(
         agent_config_path,
