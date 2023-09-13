@@ -79,6 +79,7 @@ pub trait MultisigIsmMetadataBuilder: AsRef<BaseMetadataBuilder> + Send + Sync {
                 ethers::abi::encode(&[Token::FixedArray(validator_tokens)])
             }
             MetadataToken::Signatures => {
+                println!("validators: {:?}, metadata.signatures: {:?}", validators, metadata.signatures);
                 let ordered_signatures = order_signatures(validators, &metadata.signatures);
                 let threshold_signatures = &ordered_signatures[..threshold as usize];
                 threshold_signatures.concat()

@@ -7,13 +7,10 @@ use eyre::Result;
 use prometheus::IntGauge;
 use tokio::time::sleep;
 use tracing::instrument;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use hyperlane_base::{db::HyperlaneRocksDB, CheckpointSyncer, CoreMetrics};
-use hyperlane_core::{
-    accumulator::incremental::IncrementalMerkle, Checkpoint, CheckpointWithMessageId,
-    HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneSignerExt, Mailbox,
-};
+use hyperlane_core::{accumulator::incremental::IncrementalMerkle, Checkpoint, CheckpointWithMessageId, HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneSignerExt, Mailbox, Signable};
 use hyperlane_ethereum::SingletonSignerHandle;
 
 #[derive(Clone)]
@@ -113,7 +110,11 @@ impl ValidatorSubmitter {
                             continue;
                         }
 
+                        warn!("queued_checkpoint: {:?}", queued_checkpoint);
+
                         let signed_checkpoint = self.signer.sign(queued_checkpoint).await?;
+                        warn!("signed_checkpoint: {:?}", signed_checkpoint);
+                        warn!("signed_checkpoint.signing_value: {:?}", queued_checkpoint.signing_hash());
                         self.checkpoint_syncer
                             .write_checkpoint(&signed_checkpoint)
                             .await?;
