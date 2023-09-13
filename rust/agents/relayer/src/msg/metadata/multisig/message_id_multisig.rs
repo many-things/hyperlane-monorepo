@@ -7,7 +7,7 @@ use derive_new::new;
 use eyre::{Context, Result};
 use hyperlane_base::MultisigCheckpointSyncer;
 use hyperlane_core::{HyperlaneMessage, H256};
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::msg::metadata::BaseMetadataBuilder;
 
@@ -41,8 +41,6 @@ impl MultisigIsmMetadataBuilder for MessageIdMultisigMetadataBuilder {
         else {
             return Ok(None);
         };
-
-        println!("quorum_checkpoint: {:?}", quorum_checkpoint);
 
         if quorum_checkpoint.checkpoint.message_id != message.id() {
             warn!(
