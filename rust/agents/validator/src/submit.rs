@@ -7,7 +7,7 @@ use eyre::{bail, Result};
 use hyperlane_core::MerkleTreeHook;
 use prometheus::IntGauge;
 use tokio::time::sleep;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use tracing::{error, instrument};
 
 use hyperlane_base::{db::HyperlaneRocksDB, CheckpointSyncer, CoreMetrics};
@@ -133,8 +133,6 @@ impl ValidatorSubmitter {
                             );
                             continue;
                         }
-
-                        warn!("queued_checkpoint: {:?}", queued_checkpoint);
 
                         let signed_checkpoint = self.signer.sign(queued_checkpoint).await?;
                         warn!("signed_checkpoint: {:?}", signed_checkpoint);
