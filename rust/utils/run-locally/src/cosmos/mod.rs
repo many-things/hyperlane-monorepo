@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, fs};
@@ -29,13 +29,7 @@ use crate::AGENT_BIN_PATH;
 use cli::{OsmosisCLI, OsmosisEndpoint};
 
 use self::deploy::deploy_cw_hyperlane;
-use self::source::{CLISource, CodeSource};
-
-// const OSMOSIS_CLI_GIT: &str = "https://github.com/osmosis-labs/osmosis";
-// const OSMOSIS_CLI_VERSION: &str = "19.0.0";
-
-const OSMOSIS_CLI_GIT: &str = "https://github.com/hashableric/osmosis";
-const OSMOSIS_CLI_VERSION: &str = "19.0.0-mnts";
+use self::source::CodeSource;
 
 const KEY_HPL_VALIDATOR: (&str,&str) = ("hpl-validator", "guard evolve region sentence danger sort despair eye deputy brave trim actor left recipe debate document upgrade sustain bus cage afford half demand pigeon");
 const KEY_HPL_RELAYER: (&str,&str) = ("hpl-relayer", "moral item damp melt gloom vendor notice head assume balance doctor retire fashion trim find biology saddle undo switch fault cattle toast drip empty");
@@ -57,42 +51,11 @@ fn default_keys<'a>() -> [(&'a str, &'a str); 6] {
 }
 
 const CW_HYPERLANE_GIT: &str = "https://github.com/many-things/cw-hyperlane";
-const CW_HYPERLANE_VERSION: &str = "0.0.4";
-
-fn make_target() -> String {
-    let os = if cfg!(target_os = "linux") {
-        "linux"
-    } else if cfg!(target_os = "macos") {
-        "darwin"
-    } else {
-        panic!("Current os is not supported by Osmosis")
-    };
-
-    let arch = if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else {
-        "amd64"
-    };
-
-    format!("{}-{}", os, arch)
-}
-
-#[allow(dead_code)]
-pub fn install_cosmos(
-    cli_dir: Option<PathBuf>,
-    cli_src: Option<CLISource>,
-    codes_dir: Option<PathBuf>,
-    codes_src: Option<CodeSource>,
-) -> (PathBuf, BTreeMap<String, PathBuf>) {
-    let osmosisd = cli_src.unwrap_or_default().install(cli_dir);
-    let codes = codes_src.unwrap_or_default().install(codes_dir);
-
-    (osmosisd, codes)
-}
+const CW_HYPERLANE_VERSION: &str = "0.0.5";
 
 #[derive(Clone)]
 pub struct CosmosConfig {
-    pub cli_path: PathBuf,
+    pub image: String,
     pub home_path: Option<PathBuf>,
 
     pub codes: BTreeMap<String, PathBuf>,
@@ -108,12 +71,18 @@ pub struct CosmosResp {
     pub node: AgentHandles,
     pub endpoint: OsmosisEndpoint,
     pub codes: Codes,
+    pub image: String,
     pub home_path: PathBuf,
+    pub chain_id: String,
 }
 
 impl CosmosResp {
-    pub fn cli(&self, bin: &Path) -> OsmosisCLI {
-        OsmosisCLI::new(bin.to_path_buf(), self.home_path.to_str().unwrap())
+    pub fn cli(&self) -> OsmosisCLI {
+        OsmosisCLI::new(
+            &self.image,
+            self.home_path.to_str().unwrap(),
+            &self.chain_id,
+        )
     }
 }
 
@@ -162,9 +131,9 @@ fn launch_cosmos_node(config: CosmosConfig) -> CosmosResp {
         None => tempdir().unwrap().into_path(),
     };
 
-    let cli = OsmosisCLI::new(config.cli_path, home_path.to_str().unwrap());
+    let cli = OsmosisCLI::new(&config.image, home_path.to_str().unwrap(), &config.chain_id);
 
-    cli.init(&config.moniker, &config.chain_id);
+    cli.init(&config.moniker);
 
     let (node, endpoint) = cli.start(config.node_addr_base, config.node_port_base);
     let codes = cli.store_codes(&endpoint, "validator", config.codes);
@@ -173,7 +142,9 @@ fn launch_cosmos_node(config: CosmosConfig) -> CosmosResp {
         node,
         endpoint,
         codes,
+        image: config.image,
         home_path,
+        chain_id: config.chain_id,
     }
 }
 
@@ -237,19 +208,12 @@ fn launch_cosmos_relayer(
     relayer
 }
 
-const ENV_CLI_PATH_KEY: &str = "E2E_OSMOSIS_CLI_PATH";
 const ENV_CW_HYPERLANE_PATH_KEY: &str = "E2E_CW_HYPERLANE_PATH";
 
 #[allow(dead_code)]
 fn run_locally() {
     let debug = false;
-
-    let cli_src = Some(
-        env::var(ENV_CLI_PATH_KEY)
-            .as_ref()
-            .map(|v| CLISource::local(v))
-            .unwrap_or_default(),
-    );
+    let image = env::var("E2E_OSMOSIS_IMAGE").unwrap_or("frostornge/osmosis".to_string());
 
     let code_src = Some(
         env::var(ENV_CW_HYPERLANE_PATH_KEY)
@@ -258,11 +222,11 @@ fn run_locally() {
             .unwrap_or_default(),
     );
 
-    let (osmosisd, codes) = install_cosmos(None, cli_src, None, code_src);
+    let codes = code_src.unwrap_or_default().install(None);
 
     let addr_base = "tcp://0.0.0.0";
     let default_config = CosmosConfig {
-        cli_path: osmosisd.clone(),
+        image: image.to_string(),
         home_path: None,
 
         codes,
@@ -302,7 +266,7 @@ fn run_locally() {
         .map(|v| (v.0.join(), v.1, v.2))
         .map(|(launch_resp, chain_id, domain)| {
             let deployments = deploy_cw_hyperlane(
-                launch_resp.cli(&osmosisd),
+                launch_resp.cli(),
                 launch_resp.endpoint.clone(),
                 deployer.to_string(),
                 launch_resp.codes.clone(),
@@ -332,7 +296,7 @@ fn run_locally() {
         }
 
         for target in targets {
-            link_networks(&osmosisd, linker, validator, node, target);
+            link_networks(linker, validator, node, target);
         }
     }
 
@@ -357,7 +321,7 @@ fn run_locally() {
             .map(|v| {
                 (
                     format!("cosmos-test-{}", v.domain),
-                    AgentConfig::new(osmosisd.clone(), validator, v),
+                    AgentConfig::new(&image, validator, v),
                 )
             })
             .collect::<BTreeMap<String, AgentConfig>>(),
@@ -402,8 +366,9 @@ fn run_locally() {
 
         for target in targets {
             let cli = OsmosisCLI::new(
-                osmosisd.clone(),
+                &image,
                 node.launch_resp.home_path.to_str().unwrap(),
+                &node.chain_id,
             );
 
             cli.wasm_execute(
