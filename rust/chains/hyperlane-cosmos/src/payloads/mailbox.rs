@@ -11,6 +11,16 @@ pub struct CountRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct ISMSpecifierRequest {
+    pub interchain_security_module: Vec<()>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ISMSpecifierResponse {
+    pub ism: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DefaultIsmRequest {
     pub default_ism: EmptyStruct,
 }
@@ -32,7 +42,7 @@ pub struct MerkleTreeRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProcessMessageRequest {
-    pub process_message: ProcessMessageRequestInner,
+    pub process: ProcessMessageRequestInner,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -40,6 +50,12 @@ pub struct ProcessMessageRequestInner {
     pub metadata: String,
     pub message: String,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CheckPointRequest {
+    pub check_point: EmptyStruct,
+}
+
 // Responses
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -60,5 +76,11 @@ pub struct DeliveredResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MerkleTreeResponse {
     pub branch: [String; TREE_DEPTH],
+    pub count: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CheckPointResponse {
+    pub root: String,
     pub count: u32,
 }
