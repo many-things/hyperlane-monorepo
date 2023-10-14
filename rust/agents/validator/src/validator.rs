@@ -4,13 +4,14 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use eyre::Result;
+use hyperlane_cosmos::verify::priv_to_binary_addr;
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::{error, info, info_span, instrument::Instrumented, warn, Instrument};
 
 use hyperlane_base::{
     db::{HyperlaneRocksDB, DB},
     run_all, BaseAgent, CheckpointSyncer, ContractSyncMetrics, CoreMetrics, HyperlaneAgentCore,
-    MessageContractSync,
+    MessageContractSync, SignerConf,
 };
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, Announcement, ChainResult, HyperlaneChain,
@@ -38,6 +39,7 @@ pub struct Validator {
     reorg_period: u64,
     interval: Duration,
     checkpoint_syncer: Arc<dyn CheckpointSyncer>,
+    raw_signer: SignerConf,
 }
 
 impl AsRef<HyperlaneAgentCore> for Validator {
@@ -97,6 +99,7 @@ impl BaseAgent for Validator {
             reorg_period: settings.reorg_period,
             interval: settings.interval,
             checkpoint_syncer,
+            raw_signer: settings.validator.clone(),
         })
     }
 
@@ -234,9 +237,14 @@ impl Validator {
             return Ok(());
         }
 
+        let address = match self.raw_signer {
+            SignerConf::CosmosKey { key, .. } => priv_to_binary_addr(key.0.as_slice().to_vec())?,
+            _ => self.signer.eth_address(),
+        };
+
         // Sign and post the validator announcement
         let announcement = Announcement {
-            validator: self.signer.eth_address(),
+            validator: address,
             mailbox_address: self.mailbox.address(),
             mailbox_domain: self.mailbox.domain().id(),
             storage_location: self.checkpoint_syncer.announcement_location(),
@@ -250,7 +258,7 @@ impl Validator {
         // the main validator submit loop. This is to avoid a situation in
         // which the validator is signing checkpoints but has not announced
         // their locations, which makes them functionally unusable.
-        let validators: [H256; 1] = [self.signer.eth_address().into()];
+        let validators: [H256; 1] = [address.into()];
         loop {
             info!("Checking for validator announcement");
             if let Some(locations) = self
@@ -293,4 +301,71 @@ impl Validator {
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use std::str::FromStr;
+
+    use ethers::{
+        signers::Wallet,
+        utils::{self},
+    };
+    use hyperlane_core::{Announcement, HyperlaneSigner, Signable, H256};
+    use hyperlane_ethereum::Signers;
+    use k256::ecdsa::SigningKey;
+
+    #[tokio::test]
+    async fn sign_manual() -> eyre::Result<()> {
+        let test_key = "45bde72a537e11d1cef58836d9278268fd393c0400852ce045fc0c2de7bbe90d";
+
+        let cases = [(
+            "0xf9e25a6be80f6d48727e42381fc3c3b7834c0cb4",
+            "0xcb4530690c80917c7e412498e7258fff4569857b2aae8e020091cf2d75730656",
+            26657,
+            "file:///var/folders/3v/g38z040x54x8l6b160vv66b40000gn/T/.tmpY4ofw1/checkpoint",
+        )];
+
+        let to_announcement = |c: (&str, &str, u32, &str)| -> eyre::Result<Announcement> {
+            let validator = hyperlane_core::H160::from_str(c.0)?;
+            let mailbox_address = hyperlane_core::H256::from_str(c.1)?;
+            let mailbox_domain = c.2;
+            let storage_location = c.3.to_string();
+
+            Ok(Announcement {
+                validator,
+                mailbox_address,
+                mailbox_domain,
+                storage_location,
+            })
+        };
+
+        for c in cases {
+            let announcement = to_announcement(c)?;
+            let hash = announcement.signing_hash();
+
+            // eth sign
+            let eth_signer = Signers::Local(Wallet::from_str(test_key)?);
+            let eth_sign = eth_signer.sign_hash(&hash).await?;
+            let eth_sign_raw = eth_sign.to_vec();
+
+            // raw sign
+            let cosmos_sign_raw = {
+                let signing_key =
+                    SigningKey::from_bytes(H256::from_str(test_key)?.as_bytes().into())?;
+
+                let message = hash.as_ref();
+                let message_hash = utils::hash_message(message); // ERC-191
+
+                let (sign, recov) =
+                    signing_key.sign_prehash_recoverable(message_hash.as_bytes())?;
+
+                let mut sign_raw = sign.to_vec();
+                sign_raw.push(recov.to_byte() + 27); // ERC-155
+
+                sign_raw
+            };
+
+            assert_eq!(eth_sign_raw, cosmos_sign_raw);
+        }
+
+        Ok(())
+    }
+}

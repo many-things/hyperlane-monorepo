@@ -43,6 +43,8 @@ solana-sdk = { workspace = true, optional = true }
 tiny-keccak = { workspace = true, features = ["keccak"]}
 uint = { workspace = true }
 config = { workspace = true, optional = true }
+generic-array = { workspace = true }
+elliptic-curve = { workspace = true }
 
 [dev-dependencies]
 hyperlane-base = { path = "../hyperlane-base" }

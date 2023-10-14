@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 
+use base64::Engine;
 use cosmrs::proto::cosmos::base::abci::v1beta1::TxResponse;
 use hyperlane_core::{
     Announcement, ChainResult, ContractLocator, HyperlaneChain, HyperlaneContract, HyperlaneDomain,
-    HyperlaneProvider, SignedType, TxOutcome, ValidatorAnnounce, H256, H512, U256,
+    HyperlaneProvider, SignedType, TxOutcome, ValidatorAnnounce, H256, U256,
 };
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
         GetAnnounceStorageLocationsRequestInner,
     },
     signers::Signer,
-    ConnectionConf,
+    ConnectionConf, CosmosProvider,
 };
 
 /// A reference to a ValidatorAnnounce contract on some Cosmos chain
@@ -53,7 +54,7 @@ impl HyperlaneChain for CosmosValidatorAnnounce {
     }
 
     fn provider(&self) -> Box<dyn HyperlaneProvider> {
-        todo!()
+        Box::new(CosmosProvider::new(self.domain.clone()))
     }
 }
 
@@ -63,12 +64,11 @@ impl ValidatorAnnounce for CosmosValidatorAnnounce {
         &self,
         validators: &[H256],
     ) -> ChainResult<Vec<Vec<String>>> {
+        let vss = validators.iter().map(hex::encode).collect::<Vec<String>>();
+
         let payload = GetAnnounceStorageLocationsRequest {
             get_announce_storage_locations: GetAnnounceStorageLocationsRequestInner {
-                validators: validators
-                    .iter()
-                    .map(|v| hex::encode(v.as_bytes()))
-                    .collect::<Vec<String>>(),
+                validators: vss,
             },
         };
 
@@ -89,10 +89,11 @@ impl ValidatorAnnounce for CosmosValidatorAnnounce {
         tx_gas_limit: Option<U256>,
     ) -> ChainResult<TxOutcome> {
         let announce_request = AnnouncementRequest {
-            announcement: AnnouncementRequestInner {
-                validator: announcement.value.validator.to_string(),
+            announce: AnnouncementRequestInner {
+                validator: hex::encode(announcement.value.validator),
                 storage_location: announcement.value.storage_location,
-                signature: hex::encode(announcement.signature.to_vec()),
+                signature: base64::engine::general_purpose::STANDARD
+                    .encode(announcement.signature.to_vec()),
             },
         };
 
@@ -100,8 +101,10 @@ impl ValidatorAnnounce for CosmosValidatorAnnounce {
             .provider
             .wasm_send(announce_request, tx_gas_limit)
             .await?;
+
         Ok(TxOutcome {
-            transaction_id: H512::from_slice(hex::decode(response.txhash).unwrap().as_slice()),
+            transaction_id: H256::from_slice(hex::decode(response.txhash).unwrap().as_slice())
+                .into(),
             executed: response.code == 0,
             gas_used: U256::from(response.gas_used),
             gas_price: U256::from(response.gas_wanted),
@@ -109,6 +112,11 @@ impl ValidatorAnnounce for CosmosValidatorAnnounce {
     }
 
     async fn announce_tokens_needed(&self, announcement: SignedType<Announcement>) -> Option<U256> {
-        todo!() // not implemented yet
+        let out = self
+            .announce(announcement, None)
+            .await
+            .expect("failed to announce");
+
+        None
     }
 }

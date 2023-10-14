@@ -580,7 +580,15 @@ impl ChainConf {
                 ));
                 Ok(ism as Box<dyn InterchainSecurityModule>)
             }
-            ChainConnectionConf::Cosmos(_conf) => todo!(),
+            ChainConnectionConf::Cosmos(conf) => {
+                let signer = self.cosmos_signer().await.context(ctx)?;
+                let ism = Box::new(h_cosmos::CosmosInterchainSecurityModule::new(
+                    conf,
+                    locator,
+                    signer.unwrap(),
+                ));
+                Ok(ism as Box<dyn InterchainSecurityModule>)
+            }
         }
         .context(ctx)
     }
@@ -643,7 +651,7 @@ impl ChainConf {
             ChainConnectionConf::Cosmos(conf) => {
                 let signer = self.cosmos_signer().await.context(ctx)?;
                 let ism = Box::new(h_cosmos::CosmosRoutingIsm::new(
-                    conf.clone(),
+                    &conf.clone(),
                     locator.clone(),
                     signer.unwrap().clone(),
                 ));

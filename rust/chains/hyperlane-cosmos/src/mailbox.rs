@@ -1,25 +1,31 @@
 use std::fmt::{Debug, Formatter};
+use std::io::Cursor;
 use std::num::NonZeroU64;
 use std::ops::RangeInclusive;
+use std::str::FromStr;
 
 use crate::grpc::{WasmGrpcProvider, WasmProvider};
+use crate::payloads::general::EventAttribute;
 use crate::payloads::mailbox::{ProcessMessageRequest, ProcessMessageRequestInner};
 use crate::payloads::{general, mailbox};
 use crate::rpc::{CosmosWasmIndexer, WasmIndexer};
+use crate::CosmosProvider;
 use crate::{signers::Signer, verify, ConnectionConf};
 use async_trait::async_trait;
 
 use cosmrs::proto::cosmos::base::abci::v1beta1::TxResponse;
 use cosmrs::proto::cosmos::tx::v1beta1::SimulateResponse;
 
-use cosmrs::tendermint::abci::EventAttribute;
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, utils::fmt_bytes, ChainResult, Checkpoint,
     HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneMessage, HyperlaneProvider,
     Indexer, LogMeta, Mailbox, TxCostEstimate, TxOutcome, H256, U256,
 };
-use hyperlane_core::{ContractLocator, MessageIndexer, RawHyperlaneMessage, SequenceIndexer, H512};
-use tracing::{info, instrument};
+use hyperlane_core::{
+    ContractLocator, Decode, MessageIndexer, RawHyperlaneMessage, SequenceIndexer, H512,
+};
+use tracing::{info, instrument, warn};
+use crate::binary::h256_to_h512;
 
 /// A reference to a Mailbox contract on some Cosmos chain
 pub struct CosmosMailbox {
@@ -59,7 +65,7 @@ impl HyperlaneChain for CosmosMailbox {
     }
 
     fn provider(&self) -> Box<dyn HyperlaneProvider> {
-        todo!()
+        Box::new(CosmosProvider::new(self.domain.clone()))
     }
 }
 
@@ -84,8 +90,16 @@ impl Mailbox for CosmosMailbox {
         let branch = response
             .branch
             .iter()
-            .map(|b| H256::from_slice(&hex::decode(b).unwrap()))
-            .collect::<Vec<H256>>();
+            .map(|b| {
+                if b.is_empty() {
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                } else {
+                    b
+                }
+            })
+            .map(H256::from_str)
+            .collect::<Result<Vec<H256>, _>>()
+            .expect("fail to parse tree branch");
 
         Ok(IncrementalMerkle {
             branch: branch.try_into().unwrap(),
@@ -99,9 +113,14 @@ impl Mailbox for CosmosMailbox {
             count: general::EmptyStruct {},
         };
 
-        let data = self.provider.wasm_query(payload, lag).await?;
-        let response: mailbox::CountResponse = serde_json::from_slice(&data)?;
+        let data = self.provider.wasm_query(payload, lag).await;
 
+        if let Err(e) = data {
+            println!("error: {:?}", e);
+            return Ok(0);
+        }
+
+        let response: mailbox::CountResponse = serde_json::from_slice(&data?)?;
         Ok(response.count)
     }
 
@@ -112,15 +131,40 @@ impl Mailbox for CosmosMailbox {
             message_delivered: mailbox::DeliveredRequestInner { id },
         };
 
-        let data = self.provider.wasm_query(payload, None).await?;
-        let response: mailbox::DeliveredResponse = serde_json::from_slice(&data)?;
+        let delivered = match self.provider.wasm_query(payload, None).await {
+            Ok(v) => {
+                let response: mailbox::DeliveredResponse = serde_json::from_slice(&v)?;
 
-        Ok(response.delivered)
+                response.delivered
+            }
+            Err(err) => {
+                warn!(
+                    "error while checking the message delivery status: {:?}",
+                    err
+                );
+
+                false
+            }
+        };
+
+        Ok(delivered)
     }
 
     #[instrument(level = "debug", err, ret, skip(self))]
     async fn latest_checkpoint(&self, lag: Option<NonZeroU64>) -> ChainResult<Checkpoint> {
-        todo!()
+        let payload = mailbox::CheckPointRequest {
+            check_point: general::EmptyStruct {},
+        };
+
+        let data = self.provider.wasm_query(payload, None).await?;
+        let response: mailbox::CheckPointResponse = serde_json::from_slice(&data)?;
+
+        Ok(Checkpoint {
+            mailbox_address: self.address,
+            mailbox_domain: self.domain.id(),
+            root: response.root.parse().unwrap(),
+            index: response.count,
+        })
     }
 
     #[instrument(err, ret, skip(self))]
@@ -141,15 +185,22 @@ impl Mailbox for CosmosMailbox {
     async fn recipient_ism(&self, recipient: H256) -> ChainResult<H256> {
         let address = verify::digest_to_addr(recipient, &self.signer.prefix)?;
 
-        let payload = mailbox::DefaultIsmRequest {
-            default_ism: general::EmptyStruct {},
+        let payload = mailbox::ISMSpecifierRequest {
+            interchain_security_module: vec![],
         };
 
         let data = self.provider.wasm_query_to(address, payload, None).await?;
-        let response: mailbox::DefaultIsmResponse = serde_json::from_slice(&data)?;
+
+        let response: mailbox::ISMSpecifierResponse = serde_json::from_slice(&data)?;
 
         // convert Hex to H256
-        let ism = H256::from_slice(&hex::decode(response.default_ism)?);
+        let default_ism = self.default_ism().await?;
+        let ism = response
+            .ism
+            .map(hex::decode)
+            .transpose()?
+            .map(|v| H256::from_slice(&v))
+            .unwrap_or(default_ism);
         Ok(ism)
     }
 
@@ -161,7 +212,7 @@ impl Mailbox for CosmosMailbox {
         tx_gas_limit: Option<U256>,
     ) -> ChainResult<TxOutcome> {
         let process_message = ProcessMessageRequest {
-            process_message: ProcessMessageRequestInner {
+            process: ProcessMessageRequestInner {
                 message: hex::encode(RawHyperlaneMessage::from(message)),
                 metadata: hex::encode(metadata),
             },
@@ -172,7 +223,7 @@ impl Mailbox for CosmosMailbox {
             .wasm_send(process_message, tx_gas_limit)
             .await?;
         Ok(TxOutcome {
-            transaction_id: H512::from_slice(hex::decode(response.txhash).unwrap().as_slice()),
+            transaction_id: h256_to_h512(H256::from_slice(hex::decode(response.txhash).unwrap().as_slice())),
             executed: response.code == 0,
             gas_used: U256::from(response.gas_used),
             gas_price: U256::from(response.gas_wanted),
@@ -186,11 +237,14 @@ impl Mailbox for CosmosMailbox {
         metadata: &[u8],
     ) -> ChainResult<TxCostEstimate> {
         let process_message = ProcessMessageRequest {
-            process_message: ProcessMessageRequestInner {
+            process: ProcessMessageRequestInner {
                 message: hex::encode(RawHyperlaneMessage::from(message)),
                 metadata: hex::encode(metadata),
             },
         };
+
+        println!("process_message: {:?}", process_message);
+        println!("metadata: {:?}", metadata);
 
         let response: SimulateResponse = self.provider.wasm_simulate(process_message).await?;
         let result = TxCostEstimate {
@@ -241,19 +295,9 @@ impl CosmosMailboxIndexer {
                 let key = attr.key.as_str();
                 let value = attr.value.as_str();
 
-                match key {
-                    "version" => res.version = value.parse().unwrap(),
-                    "nonce" => res.nonce = value.parse().unwrap(),
-                    "origin" => res.origin = value.parse().unwrap(),
-                    "sender" => {
-                        res.sender = H256::from_slice(hex::decode(value).unwrap().as_slice())
-                    }
-                    "destination" => res.destination = value.parse().unwrap(),
-                    "recipient" => {
-                        res.recipient = H256::from_slice(hex::decode(value).unwrap().as_slice())
-                    }
-                    "body" => res.body = hex::decode(value).unwrap(),
-                    _ => {}
+                if key == "message" {
+                    let mut reader = Cursor::new(hex::decode(value).unwrap());
+                    res = HyperlaneMessage::read_from(&mut reader).unwrap();
                 }
             }
 
