@@ -117,6 +117,7 @@ impl ValidatorSubmitter {
                             continue;
                         }
 
+
                         let signed_checkpoint = self.signer.sign(queued_checkpoint).await?;
                         self.checkpoint_syncer
                             .write_checkpoint(&signed_checkpoint)
