@@ -2,8 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use super::general::EmptyStruct;
 
-const TREE_DEPTH: usize = 32;
 // Requests
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GeneralMailboxQuery<T> {
+    pub mailbox: T,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CountRequest {
@@ -11,13 +14,18 @@ pub struct CountRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ISMSpecifierRequest {
-    pub interchain_security_module: Vec<()>,
+pub struct NonceRequest {
+    pub nonce: EmptyStruct,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ISMSpecifierResponse {
-    pub ism: Option<String>,
+pub struct RecipientIsmRequest {
+    pub recipient_ism: RecipientIsmRequestInner,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RecipientIsmRequestInner {
+    pub recipient_addr: String, // hexbinary
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,11 +44,6 @@ pub struct DeliveredRequestInner {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct MerkleTreeRequest {
-    pub merkle_tree: EmptyStruct,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct ProcessMessageRequest {
     pub process: ProcessMessageRequestInner,
 }
@@ -51,16 +54,15 @@ pub struct ProcessMessageRequestInner {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CheckPointRequest {
-    pub check_point: EmptyStruct,
-}
-
 // Responses
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CountResponse {
     pub count: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NonceResponse {
+    pub nonce: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -74,13 +76,6 @@ pub struct DeliveredResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct MerkleTreeResponse {
-    pub branch: [String; TREE_DEPTH],
-    pub count: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CheckPointResponse {
-    pub root: String,
-    pub count: u32,
+pub struct RecipientIsmResponse {
+    pub ism: String,
 }

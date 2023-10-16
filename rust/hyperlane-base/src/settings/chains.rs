@@ -1,15 +1,11 @@
-use ethers::{prelude::Selector, types::Chain};
+use ethers::prelude::Selector;
 use std::collections::HashMap;
 
-use ethers::prelude::Selector;
 use eyre::{eyre, Context, Result};
-use serde::Deserialize;
-use std::collections::HashMap;
 
 use ethers_prometheus::middleware::{
     ChainInfo, ContractInfo, PrometheusMiddlewareConf, WalletInfo,
 };
-use eyre::{eyre, Context, Result};
 use hyperlane_core::{
     AggregationIsm, CcipReadIsm, ContractLocator, HyperlaneAbi, HyperlaneDomain,
     HyperlaneDomainProtocol, HyperlaneMessage, HyperlaneProvider, HyperlaneSigner, IndexMode,
@@ -63,37 +59,6 @@ pub enum ChainConnectionConf {
     Sealevel(h_sealevel::ConnectionConf),
     /// Cosmos configuration.
     Cosmos(h_cosmos::ConnectionConf),
-}
-
-/// Specify the chain name (enum variant) under the `chain` key
-#[derive(Debug, Deserialize)]
-#[serde(tag = "protocol", content = "connection", rename_all = "camelCase")]
-enum RawChainConnectionConf {
-    Ethereum(h_eth::RawConnectionConf),
-    Fuel(h_fuel::RawConnectionConf),
-    Sealevel(h_sealevel::RawConnectionConf),
-    Cosmos(h_cosmos::RawConnectionConf),
-    #[serde(other)]
-    Unknown,
-}
-
-impl FromRawConf<'_, RawChainConnectionConf> for ChainConnectionConf {
-    fn from_config_filtered(
-        raw: RawChainConnectionConf,
-        cwp: &ConfigPath,
-        _filter: (),
-    ) -> ConfigResult<Self> {
-        use RawChainConnectionConf::*;
-        match raw {
-            Ethereum(r) => Ok(Self::Ethereum(r.parse_config(&cwp.join("connection"))?)),
-            Fuel(r) => Ok(Self::Fuel(r.parse_config(&cwp.join("connection"))?)),
-            Sealevel(r) => Ok(Self::Sealevel(r.parse_config(&cwp.join("connection"))?)),
-            Cosmos(r) => Ok(Self::Cosmos(r.parse_config(&cwp.join("connection"))?)),
-            Unknown => {
-                Err(eyre!("Unknown chain protocol")).into_config_result(|| cwp.join("protocol"))
-            }
-        }
-    }
 }
 
 impl ChainConnectionConf {
@@ -218,6 +183,16 @@ impl ChainConf {
                     .map(|m| Box::new(m) as Box<dyn MerkleTreeHook>)
                     .map_err(Into::into)
             }
+            ChainConnectionConf::Cosmos(conf) => {
+                let signer = self.cosmos_signer().await.context(ctx)?.unwrap();
+                let hook = h_cosmos::CosmosMerkleTreeHook::new(
+                    conf.clone(),
+                    locator.clone(),
+                    signer.clone(),
+                );
+
+                Ok(Box::new(hook) as Box<dyn MerkleTreeHook>)
+            }
         }
         .context(ctx)
     }
@@ -253,9 +228,9 @@ impl ChainConf {
                     conf.clone(),
                     locator,
                     signer.clone(),
-                    "mailbox_dispatch".to_string(), // TODO: is this correct for?
+                    "mailbox_dispatch".to_string(),
                 ));
-                Ok(indexer as Box<dyn MessageIndexer>)
+                Ok(indexer as Box<dyn SequenceIndexer<HyperlaneMessage>>)
             }
         }
         .context(ctx)
@@ -406,6 +381,13 @@ impl ChainConf {
             ChainConnectionConf::Fuel(_) => todo!(),
             ChainConnectionConf::Sealevel(_) => {
                 let indexer = Box::new(h_sealevel::SealevelMerkleTreeHookIndexer::new());
+                Ok(indexer as Box<dyn SequenceIndexer<MerkleTreeInsertion>>)
+            }
+            ChainConnectionConf::Cosmos(conf) => {
+                let indexer = Box::new(h_cosmos::CosmosMerkleeTreeHookIndexer::new(
+                    conf.clone(),
+                    locator,
+                ));
                 Ok(indexer as Box<dyn SequenceIndexer<MerkleTreeInsertion>>)
             }
         }
@@ -573,8 +555,15 @@ impl ChainConf {
             ChainConnectionConf::Sealevel(_) => {
                 Err(eyre!("Sealevel does not support aggregation ISM yet")).context(ctx)
             }
-            ChainConnectionConf::Cosmos(_) => {
-                Err(eyre!("Cosmos does not support aggregation ISM yet")).context(ctx)
+            ChainConnectionConf::Cosmos(conf) => {
+                let signer = self.cosmos_signer().await.context(ctx)?;
+                let ism = Box::new(h_cosmos::CosmosAggregationIsm::new(
+                    conf.clone(),
+                    locator.clone(),
+                    signer.unwrap().clone(),
+                ));
+
+                Ok(ism as Box<dyn AggregationIsm>)
             }
         }
         .context(ctx)

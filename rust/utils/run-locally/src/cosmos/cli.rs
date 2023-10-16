@@ -194,7 +194,6 @@ impl OsmosisCLI {
 
             ret.insert(name, code_id);
         }
-
         serde_json::from_str(&serde_json::to_string(&ret).unwrap()).unwrap()
     }
 
@@ -319,6 +318,30 @@ impl OsmosisCLI {
         let output = serde_json::from_str(cmd.first().unwrap()).unwrap();
 
         output
+    }
+
+    pub fn bank_send(
+        &self,
+        endpoint: &OsmosisEndpoint,
+        sender: &str,
+        sender_addr: &str,
+        addr: &str,
+        funds: &str,
+    ) {
+        let mut cmd = self
+            .cli()
+            .cmd("tx")
+            .cmd("bank")
+            .cmd("send")
+            .cmd(sender_addr)
+            .cmd(addr)
+            .cmd(funds)
+            .arg("from", sender);
+
+        cmd = self.add_gas(cmd);
+        cmd = endpoint.add_rpc(cmd);
+
+        cmd.run().join();
     }
 
     fn add_genesis_accs(&self) {

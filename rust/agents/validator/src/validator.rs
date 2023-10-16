@@ -4,23 +4,23 @@ use async_trait::async_trait;
 use derive_more::AsRef;
 use eyre::Result;
 use futures_util::future::ready;
-use hyperlane_cosmos::verify::priv_to_binary_addr;
+use hyperlane_cosmos::verify::{bech32_decode, priv_to_addr_string, priv_to_binary_addr};
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::{error, info, info_span, instrument::Instrumented, warn, Instrument};
 
 use hyperlane_base::{
     db::{HyperlaneRocksDB, DB},
-    run_all, BaseAgent, CheckpointSyncer, ContractSyncMetrics, CoreMetrics, HyperlaneAgentCore,
-    MessageContractSync, SignerConf,
+    run_all,
+    settings::SignerConf,
+    BaseAgent, CheckpointSyncer, ContractSyncMetrics, CoreMetrics, HyperlaneAgentCore,
+    MessageContractSync,
 };
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, Announcement, ChainResult, HyperlaneChain,
-    HyperlaneContract, HyperlaneDomain, HyperlaneSigner,HyperlaneSignerExt, Mailbox, MerkleTreeHook,
-    Signable, TxOutcome,, ValidatorAnnounce, H256, U256,
+    HyperlaneContract, HyperlaneDomain, HyperlaneSigner, HyperlaneSignerExt, Mailbox,
+    MerkleTreeHook, Signable, TxOutcome, ValidatorAnnounce, H256, U256,
 };
 use hyperlane_ethereum::{SingletonSigner, SingletonSignerHandle};
-use tokio::{task::JoinHandle, time::sleep};
-use tracing::{error, info, info_span, instrument::Instrumented, warn, Instrument};
 
 use crate::{
     settings::ValidatorSettings,
@@ -237,8 +237,6 @@ impl Validator {
     }
 
     async fn announce(&self) -> Result<()> {
-<<<<<<< HEAD
-=======
         if self.core.settings.chains[self.origin_chain.name()]
             .signer
             .is_none()
@@ -246,13 +244,17 @@ impl Validator {
             warn!(origin_chain=%self.origin_chain, "Cannot announce validator without a signer; make sure a signer is set for the origin chain");
             return Ok(());
         }
-
         let address = match self.raw_signer {
-            SignerConf::CosmosKey { key, .. } => priv_to_binary_addr(key.0.as_slice().to_vec())?,
+            SignerConf::CosmosKey { key, .. } => {
+                let addr = priv_to_addr_string(key.0.as_slice().to_vec())?;
+                info!("Announcing validator with Cosmos key: {}", addr);
+
+                priv_to_binary_addr(key.0.as_slice().to_vec())?
+            }
+            // SignerConf::HexKey { key } => priv_to_binary_addr(key.0.as_slice().to_vec())?, //self.signer.eth_address(),
             _ => self.signer.eth_address(),
         };
 
->>>>>>> 6c8e48329 (fix: rip hash addr)
         // Sign and post the validator announcement
         let announcement = Announcement {
             validator: address,
