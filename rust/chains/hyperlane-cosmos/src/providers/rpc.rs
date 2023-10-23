@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
 use crate::binary::h256_to_h512;
+use crate::payloads::general::{EventAttribute, Log};
 use async_trait::async_trait;
 use cosmrs::rpc::client::{Client, CompatMode, HttpClient};
 use cosmrs::rpc::endpoint::tx;
@@ -76,7 +77,9 @@ impl CosmosWasmIndexer {
 impl WasmIndexer for CosmosWasmIndexer {
     fn get_client(&self) -> ChainResult<HttpClient> {
         Ok(HttpClient::builder(self.get_conn_url()?.parse()?)
-            .compat_mode(CompatMode::V0_34)
+            // indexing fails unless this is commented out. I assume the decoding in `CompatMode::V0_34`
+            // is incompatible with the current data format.
+            // .compat_mode(CompatMode::V0_34)
             .build()?)
     }
 
@@ -148,11 +151,8 @@ impl WasmIndexer for CosmosWasmIndexer {
         let total_count = tx_search_result.total_count;
         let last_page = total_count / 30 + (total_count % 30 != 0) as u32;
 
-        let handler = |txs: Vec<tx::Response>,
-                       block_hashs: HashMap<u64, H256>|
-         -> Vec<(T, LogMeta)> {
-            let mut result: Vec<(T, LogMeta)> = vec![];
-            let target_type = format!("{}-{}", Self::WASM_TYPE, self.event_type);
+            let logs = serde_json::from_str::<Vec<Log>>(&tx.log)?;
+            let logs = logs.first().unwrap();
 
             // Get BlockHash from block_search
             let client = self.get_client().unwrap();
