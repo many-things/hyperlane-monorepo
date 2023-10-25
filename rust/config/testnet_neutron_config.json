@@ -7,7 +7,7 @@
       "mailbox": "0xd53c1ce552ba6b2b1c20d101aae7d43cd0ce6eb447cfad5a7b959a78bb5244e3",
       "interchainGasPaymaster": "0xc65a56543fb255401f1ab15027a380d7ea624b920cbec32507f87a023adbeefb",
       "validatorAnnounce": "0x35f060552c32eeabce3b86ec14aec90bbd1e6fd0ae571fdea33e13be6ed10437",
-      "merkleTreeHook": "0xd1235ae4e3211bbcf1483908914c1e2cbd24cfa3a86859a02cef45891e321437",
+      "merkleTreeHook": "0x0d8a53233a016a05f234d1cd105c3a3884c7ecde176b85bde7b423a05cd45b21",
       "protocol": "cosmos",
       "finalityBlocks": 1,
       "rpcUrls": [
