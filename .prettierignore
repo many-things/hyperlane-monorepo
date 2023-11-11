@@ -1,9 +1,0 @@
-*.rs
-*.toml
-*.sh
-*.env
-
-*.lock
-
-*.Dockerfile
-Dockerfile

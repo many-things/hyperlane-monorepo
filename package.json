@@ -1,42 +1,60 @@
 {
-  "name": "@hyperlane-xyz/monorepo",
-  "description": "A yarn workspace of core Hyperlane packages",
-  "version": "0.0.0",
+  "name": "@hyperlane-xyz/core",
+  "description": "Core solidity contracts for Hyperlane",
+  "version": "1.5.1",
+  "dependencies": {
+    "@eth-optimism/contracts": "^0.6.0",
+    "@hyperlane-xyz/utils": "1.5.1",
+    "@openzeppelin/contracts": "^4.8.0",
+    "@openzeppelin/contracts-upgradeable": "^4.8.0"
+  },
   "devDependencies": {
-    "@trivago/prettier-plugin-sort-imports": "^3.2.0",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
-    "eslint": "^8.16.0",
-    "eslint-config-prettier": "^8.5.0",
-    "husky": "^8.0.0",
-    "lint-staged": "^12.4.3",
-    "prettier": "^2.4.1"
+    "@nomiclabs/hardhat-ethers": "^2.2.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "@typechain/ethers-v5": "10.0.0",
+    "@typechain/hardhat": "^6.0.0",
+    "chai": "^4.3.0",
+    "ethereum-waffle": "^3.4.4",
+    "ethers": "^5.7.2",
+    "hardhat": "^2.16.1",
+    "hardhat-gas-reporter": "^1.0.9",
+    "prettier": "^2.4.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.5",
+    "solhint": "^3.3.2",
+    "solhint-plugin-prettier": "^0.0.5",
+    "solidity-coverage": "^0.8.3",
+    "ts-generator": "^0.1.1",
+    "typechain": "^8.1.1",
+    "typescript": "^5.1.6"
   },
-  "packageManager": "yarn@3.2.0",
-  "private": true,
-  "scripts": {
-    "build": "yarn workspaces foreach --verbose --parallel --topological run build",
-    "clean": "yarn workspaces foreach --verbose --parallel run clean",
-    "postinstall": "husky install",
-    "prettier": "yarn workspaces foreach --verbose --parallel run prettier",
-    "lint": "yarn workspaces foreach --verbose --parallel run lint",
-    "test": "yarn workspaces foreach --verbose --parallel run test",
-    "coverage": "yarn workspaces foreach --verbose --parallel run coverage",
-    "version:check": "yarn version check --interactive",
-    "version:prepare": "yarn workspaces foreach --no-private --verbose --topological version --immediate",
-    "publish:all": "yarn workspaces foreach --no-private --verbose --topological npm publish --access public"
+  "directories": {
+    "test": "test"
   },
-  "workspaces": [
-    "solidity",
-    "typescript/*"
+  "files": [
+    "/dist",
+    "/contracts",
+    "/interfaces",
+    "/docs"
   ],
-  "resolutions": {
-    "async": "^2.6.4",
-    "fetch-ponyfill": "^7.1",
-    "flat": "^5.0.2",
-    "lodash": "^4.17.21",
-    "recursive-readdir": "^2.2.3",
-    "underscore": "^1.13",
-    "undici": "^5.11"
-  }
+  "homepage": "https://www.hyperlane.xyz",
+  "keywords": [
+    "Hyperlane",
+    "Solidity"
+  ],
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "repository": "https://github.com/hyperlane-xyz/hyperlane-monorepo",
+  "scripts": {
+    "build": "hardhat compile && tsc",
+    "lint": "solhint contracts/**/*.sol",
+    "clean": "hardhat clean && rm -rf ./dist ./cache ./types",
+    "coverage": "hardhat coverage && forge coverage --report lcov",
+    "docs": "forge doc",
+    "prettier": "prettier --write ./contracts ./test",
+    "test": "hardhat test && forge test -vvv",
+    "gas": "forge snapshot",
+    "gas-ci": "yarn gas --check --tolerance 2 || (echo 'Manually update gas snapshot' && exit 1)",
+    "slither": "slither ."
+  },
+  "types": "dist/index.d.ts"
 }

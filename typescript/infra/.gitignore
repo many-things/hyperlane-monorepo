@@ -1,8 +1,0 @@
-node_modules/
-tmp.ts
-dist/
-.env*
-cache/
-test/outputs
-config/environments/test/core/
-config/environments/test/igp/
