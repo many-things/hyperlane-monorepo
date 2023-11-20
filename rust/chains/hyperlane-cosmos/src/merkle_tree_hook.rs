@@ -3,6 +3,7 @@ use std::{fmt::Debug, num::NonZeroU64, ops::RangeInclusive, str::FromStr};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use cosmrs::tendermint::abci::EventAttribute;
+use hpl_interface::hook::merkle;
 use hyperlane_core::{
     accumulator::incremental::IncrementalMerkle, ChainCommunicationError, ChainResult, Checkpoint,
     ContractLocator, HyperlaneChain, HyperlaneContract, HyperlaneDomain, HyperlaneProvider,
@@ -154,13 +155,11 @@ impl CosmosMerkleTreeHook {
         let data = self
             .provider
             .wasm_query(
-                merkle_tree_hook::MerkleTreeGenericRequest {
-                    merkle_hook: payload,
-                },
+                merkle::QueryMsg::MerkleHook(merkle::MerkleHookQueryMsg::Count {}),
                 block_height,
             )
             .await?;
-        let response: merkle_tree_hook::MerkleTreeCountResponse = serde_json::from_slice(&data)?;
+        let response: merkle::CountResponse = serde_json::from_slice(&data)?;
 
         Ok(response.count)
     }
